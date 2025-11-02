@@ -1,0 +1,1 @@
+python -m rl_zoo3.train --algo sac --env PulleyEnv-v0 --gym-packages env --env-kwargs dt:0.001 max_steps:2500 -conf hyperparams\pulley_best.yaml -n 20000000 --tensorboard-log tb --verbose 2 --log-interval 1000 --eval-freq 500000 --eval-episodes 300 --vec-env dummy --num-threads 1
