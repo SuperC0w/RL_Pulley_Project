@@ -287,10 +287,10 @@ class PulleyEnvGym(gym.Env):
         terms = {"e2": e_theta*e_theta, "dq2": dtheta*dtheta, "u2": u2, "du2": du2, "e_coact2": e_coact*e_coact}
 
         # Giving reward if theta is within the success range
-        if self._theta_success(obs):
-            reward += 1000
-            if self._coact_success(action):
-                reward += 1000
+        # if self._theta_success(obs):
+        #     reward += 1000
+        # if self._coact_success(action):
+        #     reward += 1000
         
         return reward, terms
 

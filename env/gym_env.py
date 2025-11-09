@@ -37,7 +37,7 @@ class PulleyEnvGym(gym.Env):
         self.goal_dim = 5 # since we are using cos theta, sin theta to encode the goal position
         self.random_theta_flag = True
         self.theta_init_range = (-np.pi/2, np.pi/2)
-        self.random_dtheta_flag = False
+        self.random_dtheta_flag = True
         self.dtheta_init_range = (-np.deg2rad(45.0), np.deg2rad(45.0))
         
         # Variables on whether or random disturbance force should be enabled
@@ -46,17 +46,14 @@ class PulleyEnvGym(gym.Env):
 
         # Tuning termination conditions for the environment
         self._success_streak = 0
-        self.success_band = dict(angle=np.deg2rad(1.0), vel=np.deg2rad(.1), hold_steps=200, coact_force=0.3)
-        self.safety_limits = dict(angle=np.deg2rad(110.0), vel=np.deg2rad(360.0))
+        self.success_band = dict(angle=np.deg2rad(1.0), vel=np.deg2rad(.1), hold_steps=200, coact_force=0.1)
+        self.safety_limits = dict(angle=np.deg2rad(110.0), vel=np.deg2rad(1080.0))
         # TESTING->making the velocity a soft termination condition and additionally adding a penalty as the limit is approached
-        self.vel_soft_margin_ratio = 0.5                   # start penalizing at 80% of limit
+        self.vel_soft_margin_ratio = 2/3                   # start penalizing at 80% of limit
         self.vel_violate_patience = 50      # must exceed limit N consecutive steps (set to 100 to allow agent 10 actions to fix vel)
         self.w_vel_safety = 100.0                           # hinge penalty weight
         # runtime counters
         self._vel_violate_steps = 0
-
-        # TESTING->adding a penalty to try and keep tau 1 and tau 2 as close as possible to each other
-        self.max_action_diff = 0.010
 
         # state/observation space (for our case state space = observation space) 
         base_obs_dim = 6  # [theta, dtheta, phi1, dphi1, phi2, dphi2]
@@ -97,9 +94,11 @@ class PulleyEnvGym(gym.Env):
         else:
             dtheta = 0
         x = base_obs.astype(np.float32, copy=True)
+        x[:] = 0.0
         x[0] = np.float32(theta)
         x[1] = np.float32(dtheta)
-        x[2:] = 0.0
+        x[2] = -np.float32(theta)
+        x[4] = np.float32(theta)
         self.sim._x = x
 
         # random external force
@@ -265,12 +264,6 @@ class PulleyEnvGym(gym.Env):
         du2 = float(np.dot(action - self.prev_action, action - self.prev_action))
         cost = w_e*e_theta*e_theta + w_d*dtheta*dtheta + w_u*u2 + w_du*du2 + w_coact*e_coact*e_coact
 
-        # TESTING-> adding reward to try and keep tau1 and tau2 as close as possible to each other
-        max_diff = self.max_action_diff
-        pair_violation = max(0.0, abs(float(action[0]-action[1])) - max_diff)
-        w_pair = 5.0e6  # tune
-        cost += w_pair * (pair_violation ** 2)
-
         # --- progress bonus (shaping) ---
         theta_progress_bonus = 100.0 if abs(self.prev_e_theta) > abs(e_theta) else 0.0
         if self.prev_e_coact is not None:
@@ -287,9 +280,9 @@ class PulleyEnvGym(gym.Env):
         terms = {"e2": e_theta*e_theta, "dq2": dtheta*dtheta, "u2": u2, "du2": du2, "e_coact2": e_coact*e_coact}
 
         # Giving reward if theta is within the success range
-        if self._theta_success(obs):
+        if self._coact_success(action):
             reward += 1000
-            if self._coact_success(action):
+            if self._theta_success(obs):
                 reward += 1000
         
         return reward, terms
@@ -347,7 +340,6 @@ class PulleyEnvGym(gym.Env):
         if ad <= margin:
             return 0.0
         # normalize how far we are between margin and limit (0..1..+)
-        denom = max(1e-6, limit - margin) # get the max just in case, to prevent nans
+        denom = max(1e-6, limit - margin)
         x = (ad - margin) / denom
         return self.w_vel_safety * (x ** 2)
-    

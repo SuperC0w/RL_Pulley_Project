@@ -77,6 +77,9 @@ def main():
     renderer.fig.canvas.flush_events() 
 
     obs, info = env.reset()
+    env._x[0] = np.pi/4
+    env._x[2] = -np.pi/4
+    env._x[4] = np.pi/4
     print("Controls are in the separate 'Pulley Controls' window.")
 
     hold_step_count = 9 # number of steps to hold before triggering force impulse
@@ -144,6 +147,10 @@ def main():
                             env.trigger_impulse()
                             panel.impulsed_triggered_flag = False
                 else:
+                    # if current_time < 5:
+                    #     action = np.array([0.02925051, 0.03317781])
+                    # else:
+                    #     action = np.array([0.09595277, 0.10405273])
                     action = panel.actions.as_array()
                 # print(action)
                 obs, info = env.step(action)

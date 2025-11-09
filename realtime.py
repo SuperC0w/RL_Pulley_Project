@@ -16,7 +16,7 @@ DT_SIM = 0.001
 FPS = 90
 
 USE_PID = False
-USE_MODEL = False
+USE_MODEL = True
 
 def _wrap_pi(x):
         """
@@ -147,6 +147,7 @@ def main():
                     action = panel.actions.as_array()
                 # print(action)
                 obs, info = env.step(action)
+                # print(obs[1])
                 current_time = info.get("t")
                 acc -= dt
             # Render at a target FPS (wall-clock based)

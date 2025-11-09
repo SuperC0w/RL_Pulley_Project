@@ -24,12 +24,6 @@ class PulleyEnv:
         if seed is not None:
             self.rng = np.random.default_rng(seed)
         self._x = np.zeros(STATE_SIZE, dtype=np.float32)
-        
-        # TESTING->Seeing how the system would react if theta starts at a non-zero location and what happens if phi1 and phi2 change
-        # accordingly
-        # self._x[0] = np.pi/4
-        # self._x[2] = -np.pi/4
-        # self._x[4] = np.pi/4
 
         self._t = 0.0
         self._steps = 0
