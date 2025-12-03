@@ -1,40 +1,37 @@
-# Code/env/gym_env.py
 import numpy as np
 import gymnasium as gym
 from gymnasium import spaces
-
-# Pull your pieces in
 from .params import PulleyParams
 from .pulley_env import PulleyEnv
 
 class PulleyEnvGym(gym.Env):
     """
-    Adapter that wraps your existing simulator with the Gymnasium API.
+    Adapter that wraps existing simulator with the Gymnasium API.
     """
     metadata = {"render_modes": ["human", "rgb_array"], "render_fps": 60}
 
-    def __init__(self, dt=0.001, max_steps=10000, render_mode=None, seed=None, action_repeat=10):
+    def __init__(self, dt=0.001, max_steps=10000, render_mode=None, seed=None, action_repeat=10, max_action_diff=0.040):
         super().__init__()
         self.dt = float(dt)
         self.max_steps = int(max_steps)
         self.action_repeat = int(action_repeat) # used to store the number of steps the agent should hold the action
         self.sim = PulleyEnv(PulleyParams(), dt=self.dt, max_steps=self.max_steps) # create sim environment
+        self.max_action_diff = max_action_diff
         self.u_max = self.sim.params.tau_max
         self.pulley_radius = self.sim.params.r1
+        self.u_coact_max = (self.u_max - self.max_action_diff/2)*2/self.pulley_radius
+        self.u_coact_min = (0 + self.max_action_diff/2)*2/self.pulley_radius
         self.render_mode = render_mode
         self.step_count = 0
         self.env_steps = 0
-        self.prev_e_theta = 0.0
-        self.prev_e_coact = None
 
         # Goal config
         self.include_goal_flag = True
         self.theta_goal = 0
         self.theta_goal_init_range = (-np.pi/2, np.pi/2) # randomization goal position range for theta
-        self.include_coact_goal_flag = True
         self.coact_goal = 0
-        self.coact_goal_init_range = (0,self.u_max*2/self.pulley_radius)
-        self.goal_dim = 5 # since we are using cos theta, sin theta to encode the goal position
+        self.coact_goal_init_range = (self.u_coact_min, self.u_coact_max)
+        self.goal_dim = 3 # since we are using cos theta, sin theta to encode the goal position
         self.random_theta_flag = True
         self.theta_init_range = (-np.pi/2, np.pi/2)
         self.random_dtheta_flag = True
@@ -45,10 +42,11 @@ class PulleyEnvGym(gym.Env):
         self.force_range = (-1.0, 1.0)
 
         # Tuning termination conditions for the environment
-        self._success_streak = 0
+        self.success_streak = 0
         self.success_band = dict(angle=np.deg2rad(1.0), vel=np.deg2rad(.1), hold_steps=200, coact_force=0.1)
         self.safety_limits = dict(angle=np.deg2rad(110.0), vel=np.deg2rad(1080.0))
-        # TESTING->making the velocity a soft termination condition and additionally adding a penalty as the limit is approached
+        
+        # Making the velocity a soft termination condition and additionally adding a penalty as the limit is approached
         self.vel_soft_margin_ratio = 2/3                   # start penalizing at 80% of limit
         self.vel_violate_patience = 50      # must exceed limit N consecutive steps (set to 100 to allow agent 10 actions to fix vel)
         self.w_vel_safety = 100.0                           # hinge penalty weight
@@ -60,20 +58,11 @@ class PulleyEnvGym(gym.Env):
         obs_dim = base_obs_dim + self.goal_dim
         obs_hi = np.full((obs_dim,), np.inf, dtype=np.float32)
         self.observation_space = spaces.Box(low=-obs_hi, high=obs_hi, dtype=np.float32)
-        # action space
-        self.action_space = spaces.Box(
-            low=0, high=self.u_max, shape=(2,), dtype=np.float32
-        ) # shape of 2 for tau1 and tau2
         
-        # Variables below to keep track of current action and previous action
-        self.prev_action = np.zeros(2, dtype=np.float32)
-        self.curr_action = np.zeros(2, dtype=np.float32)
-
-        # TESTING->maybe use this if we want to train the model to see if it can track a desired trajectory
-        # self.theta_ref_fn = lambda t: 0.0   # e.g., lambda t: 0.5*np.sin(0.5*t)
-        # self.success_band = dict(angle=np.deg2rad(3.0), vel=np.deg2rad(10.0), hold_steps=25)
-        # self.prev_action = np.zeros(2, dtype=np.float32)
-        # self.step_count = 0
+        # configuring action space
+        low = np.array([-self.max_action_diff], dtype=np.float32)
+        high = np.array([self.max_action_diff], dtype=np.float32)
+        self.action_space = spaces.Box(low=low, high=high, shape=(1,), dtype=np.float32)
 
     # ---------------- Gym API ----------------
     def reset(self, seed=None, options=None):
@@ -109,41 +98,51 @@ class PulleyEnvGym(gym.Env):
 
         # sample goal angle θ*
         self.theta_goal = float(rng.uniform(*self.theta_goal_init_range))
-        self.prev_e_theta = self._wrap_pi(self.sim._obs()[0] - self.theta_goal)
-        self.prev_e_coact = None
 
         # sample goal coactivation force
         self.coact_goal = float(rng.uniform(*self.coact_goal_init_range))
 
         self.step_count = 0
         self.env_steps = 0
-        self.prev_action[:] = 0.0
-        self._success_streak = 0
-
-        # TESTING->trying out different way to enforce the velocity limit
+        self.success_streak = 0
         self._vel_violate_steps = 0
 
         obs = self._observe()
         info = {"t": 0.0, "theta_goal": self.theta_goal, "coact_goal": self.coact_goal,"F": float(self.sim.params.F)}
         return obs, info
     
+    def _map_reparam_to_torques(self, a: np.ndarray) -> np.ndarray:
+        """
+        Map reparameterized action [u_coact (N), delta (Nm)] to torques [tau1, tau2] (Nm),
+        enforcing bounds so both torques are within [0, u_max] and |tau1 - tau2| <= 2*|delta|.
+        """
+        delta = float(a[0])
+
+        # Base torque from coactivation: tau1 + tau2 = u_coact * r1, select base such that tau1 = tau2
+        base = 0.5 * self.coact_goal * float(self.pulley_radius)
+
+        tau1 = base + delta/2
+        tau2 = base - delta/2
+
+        return np.array([tau1, tau2], dtype=np.float32)
+
+    
     def step(self, action):
         action = np.asarray(action, dtype=np.float32)
         action = np.clip(action, self.action_space.low, self.action_space.high)
-
-        # DEBUGGING->printing out actions
-        # print(action)
         
         total_reward = 0.0
         terminated_flag = False
         truncated_flag = False
         reason = None
         info = {}
+        
+        action = self._map_reparam_to_torques(action)
 
         # Run N inner physics steps with a zero-order hold on 'action'
         for i in range(self.action_repeat):
             self.step_count += 1  # physics step counter
-
+            
             *_, info = self.sim.step(action)
             self.curr_action = action
             obs = self._observe()
@@ -157,7 +156,6 @@ class PulleyEnvGym(gym.Env):
                 # give a big negative and terminate in the event of a simulation error
                 r, terms = -1e5, {"e2":0.0,"dq2":0.0,"u2":0.0,"du2":0.0}
                 terminated_flag, reason = True, "simulation_error"
-                # print("simulation_error")
                 if not np.isfinite(action).all():
                     print(action)
                     action = np.nan_to_num(action, nan=0.0, posinf=0.0, neginf=0.0, copy=False)
@@ -170,7 +168,7 @@ class PulleyEnvGym(gym.Env):
 
             total_reward += r
 
-            # TESTING->penalty for velocity being close to limit
+            # Penalty for velocity being close to limit
             total_reward -= self._vel_safety_penalty(obs[1])
 
             # time-limit and early exit
@@ -183,25 +181,22 @@ class PulleyEnvGym(gym.Env):
         # time reported to the agent can be macro time:
         t = float(self.step_count*self.dt)
 
-        # print(self.env_steps)
-        # print(self.step_count)
-
         if terminated_flag and reason == "success":
             print("success")
-            total_reward += 5e6
+            total_reward += 2000
         elif terminated_flag and (reason == "angle_limit"):
             # print("angle_limit")
-            total_reward -= 100000.0
+            total_reward -= 10000
         elif terminated_flag and (reason == "velocity_limit"):
             # print("velocity_limit")
-            total_reward -= 100000.0
+            total_reward -= 10000
 
         info = {
             "t": t,
             "theta_goal": self.theta_goal,
             "coact_goal": self.coact_goal,
             "reward_terms": terms,
-            "success_streak": self._success_streak,
+            "success_streak": self.success_streak,
             "F": float(self.sim.params.F),
         }
         if terminated_flag or truncated_flag:
@@ -229,10 +224,7 @@ class PulleyEnvGym(gym.Env):
     def _goal_vec(self):
         # Encode goal angle as [cos θ*, sin θ*, e_theta, coact_force, e_coact]
         e_theta = self._wrap_pi(self.sim._obs()[0] - self.theta_goal)
-        u_c = (self.curr_action[0] + self.curr_action[1]) / self.pulley_radius
-        e_coact = u_c - self.coact_goal
-        return np.array([np.cos(self.theta_goal), np.sin(self.theta_goal), e_theta, 
-                         self.coact_goal, e_coact], dtype=np.float32)
+        return np.array([np.cos(self.theta_goal), np.sin(self.theta_goal), e_theta], dtype=np.float32)
 
     def _get_coact(self, action):
         return (action[0]+action[1])/self.pulley_radius
@@ -251,39 +243,16 @@ class PulleyEnvGym(gym.Env):
 
     def _reward(self, obs, action):
 
-        theta, dtheta, e_theta, e_coact = float(obs[0]), float(obs[1]), float(obs[8]), float(obs[10])
+        theta, dtheta, e_theta = float(obs[0]), float(obs[1]), float(obs[8])
 
         # weights (tune as needed)
-        w_e  = 1         # angle error
-        w_d  = 0       # small velocity penalty
-        w_u  = 0        # action effort
-        w_du = 0        # action smoothness
-        w_coact = 0.7         # coactivation error
+        w_e  = 100         # angle error
 
-        u2  = float(np.dot(action, action))
-        du2 = float(np.dot(action - self.prev_action, action - self.prev_action))
-        cost = w_e*e_theta*e_theta + w_d*dtheta*dtheta + w_u*u2 + w_du*du2 + w_coact*e_coact*e_coact
+        cost = w_e*e_theta*e_theta
 
-        # --- progress bonus (shaping) ---
-        theta_progress_bonus = 100.0 if abs(self.prev_e_theta) > abs(e_theta) else 0.0
-        if self.prev_e_coact is not None:
-            coact_progress_bonus = 100.0 if abs(self.prev_e_coact) > abs(e_coact) else 0.0
-        else:
-            coact_progress_bonus = 0
-        reward = -cost + theta_progress_bonus + coact_progress_bonus
-
-        # book-keeping for next step
-        self.prev_action = action.astype(np.float32, copy=True)
-        self.prev_e_theta = e_theta
-        self.prev_e_coact = e_coact
+        reward = -cost
         
-        terms = {"e2": e_theta*e_theta, "dq2": dtheta*dtheta, "u2": u2, "du2": du2, "e_coact2": e_coact*e_coact}
-
-        # Giving reward if theta is within the success range
-        if self._coact_success(action):
-            reward += 1000
-            if self._theta_success(obs):
-                reward += 1000
+        terms = {"e2": e_theta*e_theta}
         
         return reward, terms
 
@@ -292,26 +261,21 @@ class PulleyEnvGym(gym.Env):
         
         # Success check
         if self._theta_success(obs) and self._coact_success(action):
-            # print("incrementing success streak")
-            self._success_streak += 1
-            if self._success_streak >= self.success_band["hold_steps"]:
+            self.success_streak += 1
+            if self.success_streak >= self.success_band["hold_steps"]:
                 return True, "success"
         else:
-            self._success_streak = 0
+            self.success_streak = 0
         
         # Angle limit check
         if abs(self._wrap_pi(theta)) > self.safety_limits["angle"]:
-            # DEBUGGING->verifying whether or not angle safety limit has been exceeded
-            # print("angle safety limit exceeded")
             return True, "angle_limit"
         
-        # TESTING->soft velocity check
+        # Soft velocity check
         if abs(dtheta) > self.safety_limits["vel"]:
             self._vel_violate_steps += 1
         else:
             self._vel_violate_steps = 0
-            # DEBUGGING->verifying whether or not velocity safety limit has been exceeded
-            # print("velocity safety limit exceeded")
         if self._vel_violate_steps >= self.vel_violate_patience:    
             return True, "velocity_limit"
         return False, None
@@ -333,13 +297,13 @@ class PulleyEnvGym(gym.Env):
         limit = float(self.safety_limits["vel"])
         margin = float(self.vel_soft_margin_ratio) * limit
 
-        # TESTING->setting a limit to how high the velocity can be for the calculation of the penalty
+        # Setting a limit to how high the velocity can be for the calculation of the penalty
         # ad = abs(float(dtheta))
         ad = min(abs(float(dtheta)), limit * 5)
         
         if ad <= margin:
             return 0.0
         # normalize how far we are between margin and limit (0..1..+)
-        denom = max(1e-6, limit - margin)
+        denom = max(1e-6, limit - margin) # get the max just in case, to prevent nans
         x = (ad - margin) / denom
         return self.w_vel_safety * (x ** 2)

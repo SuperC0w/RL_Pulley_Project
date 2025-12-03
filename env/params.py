@@ -24,11 +24,22 @@ class PulleyParams:
     c1: float = 2.53e-4   # N*m*s (pulley 1 damping)
     c2: float = 2.53e-4   # N*m*s (pulley 2 damping)
     c3: float = 6.9e-8    # N*m*s (pulley 3 damping)
-    k1: float = 1000.0   # N/m (spring 1 stiffness)
-    k2: float = 1000.0   # N/m (spring 2 stiffness)
+
+    k1: float = 100.0   # N/m (spring 1 stiffness)
+    k2: float = 100.0   # N/m (spring 2 stiffness)
+    alpha1: float = 8e5
+    alpha2: float = 8e5
+    # alpha1 = 16e5
+    # alpha2 = 16e5
+    # alpha1 = 1e4
+    # alpha2 = 1e4
     s10: float = 0       # m (spring pre-extension)
     s20: float = 0       # m (spring pre-extension)
     F: float = 0         # N (applied force at the end of the link)
+
+    # Local function to get the stiffness
+    def k_eff(self, k0, x, alpha):
+        return k0 * (1.0 + alpha * x * x)
 
     # action limits 
     tau_max: float = 0.129   # N*m (max torque magnitude that can be exerted)

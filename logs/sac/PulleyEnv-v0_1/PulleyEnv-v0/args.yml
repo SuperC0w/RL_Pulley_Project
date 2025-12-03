@@ -2,7 +2,7 @@
 - - - algo
     - sac
   - - conf_file
-    - hyperparams\pulley_best.yaml
+    - hyperparams/pulley_best.yaml
   - - device
     - auto
   - - env
@@ -57,7 +57,7 @@
   - - save_replay_buffer
     - false
   - - seed
-    - 3088219986
+    - 3434288122
   - - storage
     - null
   - - study_name

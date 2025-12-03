@@ -15,3 +15,21 @@ PulleyEnv-v0:
     - 300
   normalize: '{''norm_obs'': True, ''norm_reward'': True, ''clip_obs'': 10.0}'
   n_envs: 10
+
+PulleyEnv-Tau:
+  n_timesteps: 1e6
+  policy: MlpPolicy
+  batch_size: 1024
+  learning_rate: 0.0007904316762398891
+  buffer_size: 1000000
+  gamma: 0.9767101026286878
+  tau: 0.006016484503198004
+  ent_coef: auto
+  learning_starts: 10000
+  use_sde: true
+  policy_kwargs:
+    net_arch:
+    - 400
+    - 300
+  normalize: '{''norm_obs'': True, ''norm_reward'': True, ''clip_obs'': 10.0}'
+  n_envs: 10

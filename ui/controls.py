@@ -66,7 +66,10 @@ class ControlPanel:
         self.s_theta_goal = self._add_slider("Goal θ (radians)",  -np.pi/2, np.pi/2, 0.0, y); y -= 0.06
         
         # Coactivation goal slider 
-        self.coact_goal = self._add_slider("Coact Force (N)",  0, 8.6, 0.0, y); y -= 0.06
+        self.s_coact_goal = self._add_slider("Coact Force (N)",  0.0, 8.6, 0.0, y); y -= 0.06
+
+        # Velocity goal slider 
+        self.s_vel_goal = self._add_slider("Velocity (deg/s)",  10, 360, 10.0, y); y -= 0.06
 
         # Trajectory amplitude
         amp_slider_rect = [0.10, y, 0.80, 0.04]
