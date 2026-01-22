@@ -135,6 +135,25 @@ def main() -> None:
     plt.figure()
     plt.plot(dl_m, k_vals, label="Stiffness samples")
     plt.plot(dl_fit_m, k_fit, label="Wall model fit")
+
+    eps=1e-6
+    k1=2.41030557e-03
+    A=4.76443842e+01
+    p=1.33420633e+00
+    xmax=1.48143022e+02
+    x = np.linspace(0, 145, 400)
+    denom = np.maximum((xmax - x), eps)
+    plt.plot(x/1000, k1 + A * p / denom ** (p + 1) * 1000.0 )
+
+    eps=1e-6
+    k1=2.41030557e-03
+    A=4.76443842e+01
+    p=1.33420633e+00
+    xmax=1.48143022e+02
+    x = np.linspace(0, 145, 400)
+    denom = np.maximum((xmax - x), eps)
+    plt.plot(x/1000, k1 + A * p / denom ** (p + 1) * 1000.0 )
+    
     plt.xlabel("ΔL [m]")
     plt.ylabel("Stiffness dT/d(ΔL) [N/m]")
     plt.title("Linear Stiffness vs ΔL")

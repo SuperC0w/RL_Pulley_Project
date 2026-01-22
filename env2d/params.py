@@ -10,7 +10,7 @@ class PulleyParams:
     # Pulley heights (m)
     h1: float = 0.0255; h2: float = 0.0255; h3: float = 0.0255 ;h4: float = 0.008 ;h5: float = 0.023
     # Pulley radius (m)
-    r1: float = 0.005; r2: float = 0.005; r3: float = 0.005; r4: float = 0.02; r5: float = 0.02 
+    r1: float = 0.01175/2; r2: float = 0.01175/2; r3: float = 0.01175/2; r4: float = 0.033/2; r5: float = 0.033/2 
     # Link lengths (m)
     l1: float = 0.12; l2: float = 0.126
     # Link widths (m)
@@ -19,10 +19,10 @@ class PulleyParams:
     t: float = 0.023
     
     # Mass of pulleys (kg)
-    m1: float = np.pi*(r1+0.0108)**2*h1*density
+    m1: float = np.pi*(r1+0.0108)**2*h1*density         # kg (mass of pulley 1)
     m2: float = np.pi*(r2+0.0108)**2*h2*density         # kg (mass of pulley 2)
     m3: float = np.pi*(r3+0.0108)**2*h3*density         # kg (mass of pulley 3)
-    m4: float = np.pi*r4**2*h4*density*3         # kg (mass of pulley 4)
+    m4: float = np.pi*r4**2*h4*density         # kg (mass of pulley 4)
     m5: float = np.pi*r5**2*h5*density         # kg (mass of pulley 5)
     # Mass of links (kg)
     m_link1: float = l1*w1*t*density - l1*(w1-2*w_t)*(t-2*w_t)*density + l1*(w1-2*w_t)*(t-2*w_t)*density*infill
@@ -43,34 +43,77 @@ class PulleyParams:
     c1: float = 2.53e-4   # N*m*s (pulley 1 damping)
     c2: float = 2.53e-4   # N*m*s (pulley 2 damping)
     c3: float = 2.53e-4   # N*m*s (pulley 3 damping)
-    c4: float = 6.9e-8    # N*m*s (pulley 3 damping)
-    c5: float = 6.9e-8    # N*m*s (pulley 3 damping)
+    c4: float = 6.9e-8    # N*m*s (theta 1 damping)
+    c5: float = 6.9e-8    # N*m*s (theta 2 damping)
     
-    F: float = 0         # N (applied force at the end of the link)
+    F1: float = 0         # N (applied force at the end of the first link)
+    F2: float = 0        # N (applied force at the second link)
 
     # Spring pre-extension (m)
     s10: float = 0; s20: float = 0; s30: float = 0
 
-    # Local function to get the stiffness
-    def k_eff(self, x):
+    # Local functions to get the stiffness
+    k1_1: float = 2.41030557e-03
+    A_1: float = 4.76443842e+01
+    p_1: float = 1.33420633e+00
+    xmax_1: float = 1.18143022e+02
+    def k_eff1(self, x):
         """
         Stiffness function obtained from plot_stiffness_function
         
         :param x: Spring extension
         """
-        k0 = 1.07491780e+01
-        k1 = -1.10957257e+02
-        A = 9.99276124e-02
-        p = 1.53491397e+00
-        xmax = 1.16201538e-01
+
         eps = 1e-6
-        return k0 + k1*x + A / max((xmax - x), eps)**p
-        # alpha = 8e5
-        # k0 = 1000
-        # return k0
-        # return k0 * (1.0 + alpha * x * x)
+        x *= 1000  # convert to mm
+        denom = np.maximum((self.xmax_1 - x), eps)
+        return self.k1_1 + self.A_1 * self.p_1 / denom ** (self.p_1 + 1) * 1000
+
+    k1_2: float = 2.60343696e-03
+    A_2: float = 1.14318518e+01
+    p_2: float = 7.91426620e-01
+    xmax_2: float = 1.31860228e+02
+    def k_eff2(self, x):
+        """
+        Stiffness function obtained from plot_stiffness_function
+        
+        :param x: Spring extension
+        """
+        eps = 1e-6
+        x *= 1000  # convert to mm
+        denom = np.maximum((self.xmax_2 - x), eps)
+        return self.k1_2 + self.A_2 * self.p_2 / denom ** (self.p_2 + 1) * 1000
+
+    k1_3: float = 1.58356171e-03
+    A_3: float = 1.15052582e+01
+    p_3: float = 2.029421835e+00
+    xmax_3: float = 1.51699613e+02
+    def k_eff3(self, x):
+        """
+        Stiffness function obtained from plot_stiffness_function
+        
+        :param x: Spring extension
+        """
+        eps = 1e-6
+        x *= 1000  # convert to mm
+        denom = np.maximum((self.xmax_3 - x), eps)
+        return self.k1_3 + self.A_3 * self.p_3 / denom ** (self.p_3 + 1) * 1000
 
     # action limits 
-    tau_max1: float = 0.129/2   # N*m (max torque magnitude that can be exerted)
-    tau_max2: float = 0.129/2
-    tau_max3: float = 0.129
+    tau_max1: float = 0.0286   # N*m (max torque magnitude that can be exerted)
+    tau_max2: float = 0.0286
+    tau_max3: float = 0.0286
+
+    # def k_eff(self, x):
+    #     """
+    #     Stiffness function obtained from plot_stiffness_function
+        
+    #     :param x: Spring extension
+    #     """
+    #     k0 = 1.07491780e+01
+    #     k1 = -1.10957257e+02
+    #     A = 9.99276124e-02
+    #     p = 1.53491397e+00
+    #     xmax = 1.16201538e-01
+    #     eps = 1e-6
+    #     return k0 + k1*x + A / max((xmax - x), eps)**p

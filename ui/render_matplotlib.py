@@ -64,12 +64,12 @@ class MatplotlibRenderer:
         self.ln_coact_goal.set_linestyle((0, (12, 10)))
         (self.ln_tau1,)  = self.ax_tau1.plot([], [], lw=1.0, antialiased=False)
         (self.ln_tau2,)  = self.ax_tau2.plot([], [], lw=1.0, antialiased=False)
-        for ax, lab in ((self.ax_theta, "θ (rad)"),
-                        (self.ax_phi1,  "φ₁ (rad)"),
-                        (self.ax_phi2,  "φ₂ (rad)"),
+        for ax, lab in ((self.ax_theta, "\u03B8 (rad)"),
+                        (self.ax_phi1,  "\u03d5$_1$ (rad)"),
+                        (self.ax_phi2,  "\u03d5$_2$ (rad)"),
                         (self.ax_coact, "Co-activation (N)"),
-                        (self.ax_tau1, "Tau1 (Nm)"),
-                        (self.ax_tau2, "Tau2 (Nm)")):
+                        (self.ax_tau1, "\u03c4$_1$ (Nm)"),
+                        (self.ax_tau2, "\u03c4$_2$ (Nm)")):
             ax.grid(False)
             ax.set_xlim(-win, 0.0)                 # fixed; show last N samples in seconds
             if ax is self.ax_coact:

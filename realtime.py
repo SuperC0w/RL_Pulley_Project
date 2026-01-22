@@ -24,6 +24,7 @@ def _map_reparam_to_torques(a: np.ndarray, coact_goal, pulley_radius) -> np.ndar
         """
         Map reparameterized action [u_coact (N), delta (Nm)] to torques [tau1, tau2] (Nm),
         enforcing bounds so both torques are within [0, u_max] and |tau1 - tau2| <= 2*|delta|.
+        Used for model
         """
         u_coact = coact_goal
         delta = float(a[0])
@@ -48,6 +49,7 @@ def main():
 
     dt = args.dt
     render_dt = 1.0 / args.fps
+
     env_params = PulleyParams()
     env = PulleyEnv(env_params, dt=dt, max_steps=100_000, seed=0)
     action = np.zeros(2, dtype=np.float32)
@@ -82,20 +84,23 @@ def main():
             return np.clip(normed, -clip_obs, clip_obs)
 
     def do_reset():
-        """Reset env state and renderer buffers (called by the Reset button)."""
-        obs, *_ = env.reset()
+        env.reset()
         renderer.clear_buffers()
-        # Optionally show the reset frame immediately:
-        # renderer.update(obs, np.array([0, 0]), t=0.0)
-    
-    # Open the separate controls window (non-blocking)
-    panel = ControlPanel(env_params, tau1_lim=2.0e-1, tau2_lim=2.0e-1, F_range=(-2.0, 2.0),
-                         show_param_sliders=True, on_reset=do_reset)
-    
-    plt.ion()                 # turn on interactive mode
+
+    panel = ControlPanel(
+        env_params,
+        tau1_lim=env_params.tau_max,
+        tau2_lim=env_params.tau_max,
+        F_range=(-2.0, 2.0),
+        show_param_sliders=True,
+        on_reset=do_reset,
+        on_impulse=env.trigger_impulse
+    )
+
+    plt.ion()
     plt.show(block=False)
     renderer.fig.canvas.draw()
-    renderer.fig.canvas.flush_events() 
+    renderer.fig.canvas.flush_events()
 
     obs, info = env.reset()
     print("Controls are in the separate 'Pulley Controls' window.")
@@ -128,10 +133,10 @@ def main():
                 print("dropping frames")
                 acc = MAX_ACC   # drop sim frames if we fell behind badly
 
-            # Step the simulation in fixed increments (could be 0, 1, or many steps)
             while acc >= dt:
                 count += 1
                 hold_step_count += 1
+
                 # get goal value from control panel
                 if use_pid or use_model:
                     if panel.follow_trajectory_flag:
@@ -145,8 +150,7 @@ def main():
 
                 if use_pid:
                     action = pid_controller.step(obs[0], obs[1], theta_goal, coact_goal)
-                    if panel.impulsed_triggered_flag == True:
-                        env.trigger_impulse()
+                    if panel.impulsed_triggered_flag:
                         panel.impulsed_triggered_flag = False
                 elif use_model:
                     if hold_step_count >= 10:
@@ -162,14 +166,13 @@ def main():
                         action = _map_reparam_to_torques(action, coact_goal, env_params.r1)
                         hold_step_count = 0
                     if hold_step_count == 1:
-                        if panel.impulsed_triggered_flag == True:
-                            env.trigger_impulse()
+                        if panel.impulsed_triggered_flag:
                             panel.impulsed_triggered_flag = False
                 else:
                     action = panel.actions.as_array()
-                # print(action)
+                    if panel.impulsed_triggered_flag:
+                        panel.impulsed_triggered_flag = False
                 obs, info = env.step(action)
-                # print(obs[1])
                 current_time = info.get("t")
                 acc -= dt
             # Render at a target FPS (wall-clock based)
@@ -177,8 +180,6 @@ def main():
                 # You can pass the sim time from env if you track it, or compute it
                 renderer.update(obs, action, np.array([theta_goal, coact_goal]), t=current_time)
                 last_render = now
-
-            # time.sleep(0.001)
     except KeyboardInterrupt:
         pass
     finally:

@@ -13,7 +13,9 @@ class PlotConfig2D:
 
 class MatplotlibRenderer2D:
     """
-    Blitting renderer for a 2-link arm. theta1/theta2 are absolute; 0 rad points down.
+    Blitting renderer for a 2-link arm.
+    theta1 is absolute (0 rad points down, positive clockwise),
+    theta2 is relative to link1 (0 rad = aligned, positive clockwise).
     """
 
     def __init__(self, params, cfg: PlotConfig2D | None = None, dt_sim: float = 0.01):
@@ -39,22 +41,28 @@ class MatplotlibRenderer2D:
         self.ax_tau = self.fig.add_subplot(gs[2, 2])
 
         win = self.cfg.N * self.dt_sim
-        (self.ln_theta1,) = self.ax_theta1.plot([], [], lw=1.0, antialiased=False)
-        (self.ln_theta2,) = self.ax_theta2.plot([], [], lw=1.0, antialiased=False)
+        self.ln_theta1, self.ln_theta1_goal = self.ax_theta1.plot([], [],
+                                                                  [], [],
+                                                                  lw=1.0, antialiased=False)
+        self.ln_theta1_goal.set_linestyle((0, (12, 10)))
+        self.ln_theta2, self.ln_theta2_goal = self.ax_theta2.plot([], [],
+                                                                  [], [],
+                                                                  lw=1.0, antialiased=False)
+        self.ln_theta2_goal.set_linestyle((0, (12, 10)))
         (self.ln_phi1,) = self.ax_phi1.plot([], [], lw=1.0, antialiased=False)
         (self.ln_phi2,) = self.ax_phi2.plot([], [], lw=1.0, antialiased=False)
         (self.ln_phi3,) = self.ax_phi3.plot([], [], lw=1.0, antialiased=False)
-        (self.ln_tau1,) = self.ax_tau.plot([], [], lw=1.0, antialiased=False, label="tau1")
-        (self.ln_tau2,) = self.ax_tau.plot([], [], lw=1.0, antialiased=False, label="tau2")
-        (self.ln_tau3,) = self.ax_tau.plot([], [], lw=1.0, antialiased=False, label="tau3")
+        (self.ln_tau1,) = self.ax_tau.plot([], [], lw=1.0, antialiased=False, label="\u03c4$_1$")
+        (self.ln_tau2,) = self.ax_tau.plot([], [], lw=1.0, antialiased=False, label="\u03c4$_2$")
+        (self.ln_tau3,) = self.ax_tau.plot([], [], lw=1.0, antialiased=False, label="\u03c4$_3$")
         self.ax_tau.legend(loc="upper right")
 
         for ax, lab in (
-            (self.ax_theta1, "theta1 (rad)"),
-            (self.ax_theta2, "theta2 (rad)"),
-            (self.ax_phi1, "phi1 (rad)"),
-            (self.ax_phi2, "phi2 (rad)"),
-            (self.ax_phi3, "phi3 (rad)"),
+            (self.ax_theta1, "\u03b8$_1$ (rad)"),
+            (self.ax_theta2, "\u03b8$_2$ (rad)"),
+            (self.ax_phi1, "\u03d5$_1$ (rad)"),
+            (self.ax_phi2, "\u03d5$_2$ (rad)"),
+            (self.ax_phi3, "\u03d5$_3$ (rad)"),
             (self.ax_tau, "torques (Nm)"),
         ):
             ax.grid(False)
@@ -71,6 +79,8 @@ class MatplotlibRenderer2D:
         self.t_buf = np.zeros(N, float)
         self.th1_buf = np.zeros(N, float)
         self.th2_buf = np.zeros(N, float)
+        self.th1_goal_buf = np.zeros(N, float)
+        self.th2_goal_buf = np.zeros(N, float)
         self.p1_buf = np.zeros(N, float)
         self.p2_buf = np.zeros(N, float)
         self.p3_buf = np.zeros(N, float)
@@ -85,7 +95,9 @@ class MatplotlibRenderer2D:
             self.joint_mid,
             self.joint_tip,
             self.ln_theta1,
+            self.ln_theta1_goal,
             self.ln_theta2,
+            self.ln_theta2_goal,
             self.ln_phi1,
             self.ln_phi2,
             self.ln_phi3,
@@ -105,6 +117,13 @@ class MatplotlibRenderer2D:
 
     def refresh_static(self):
         self._build_static_anim()
+        for ln in (
+            self.link1_ln,
+            self.link2_ln,
+            self.joint_mid,
+            self.joint_tip,
+        ):
+            ln.set_animated(True)
         self._init_blit()
 
     def update(self, obs, action=None, goal=None, t: float = 0.0):
@@ -113,6 +132,14 @@ class MatplotlibRenderer2D:
         phi1 = float(obs[4])
         phi2 = float(obs[6])
         phi3 = float(obs[8])
+
+        if goal is None:
+            th1_goal = 0.0
+            th2_goal = 0.0
+        else:
+            g = np.asarray(goal, dtype=float).ravel()
+            th1_goal = float(g[0]) if g.size > 0 else 0.0
+            th2_goal = float(g[1]) if g.size > 1 else 0.0
 
         if action is None:
             action = np.zeros(3, dtype=float)
@@ -129,13 +156,15 @@ class MatplotlibRenderer2D:
         self.joint_mid.set_data([x1], [y1])
         self.joint_tip.set_data([x2], [y2])
 
-        last_i = self._rb_append(t, theta1, theta2, phi1, phi2, phi3, tau1, tau2, tau3)
-        T, Th1, Th2, P1, P2, P3, Tau1, Tau2, Tau3 = self._rb_latestN(last_i)
+        last_i = self._rb_append(t, theta1, theta2, th1_goal, th2_goal, phi1, phi2, phi3, tau1, tau2, tau3)
+        T, Th1, Th2, Th1_goal, Th2_goal, P1, P2, P3, Tau1, Tau2, Tau3 = self._rb_latestN(last_i)
 
         if T.size:
             X = T - T[-1]
             self.ln_theta1.set_data(X, Th1)
             self.ln_theta2.set_data(X, Th2)
+            self.ln_theta1_goal.set_data(X, Th1_goal)
+            self.ln_theta2_goal.set_data(X, Th2_goal)
             self.ln_phi1.set_data(X, P1)
             self.ln_phi2.set_data(X, P2)
             self.ln_phi3.set_data(X, P3)
@@ -146,6 +175,8 @@ class MatplotlibRenderer2D:
             for ln in (
                 self.ln_theta1,
                 self.ln_theta2,
+                self.ln_theta1_goal,
+                self.ln_theta2_goal,
                 self.ln_phi1,
                 self.ln_phi2,
                 self.ln_phi3,
@@ -165,10 +196,12 @@ class MatplotlibRenderer2D:
 
         c.restore_region(self._bg_theta1)
         self.ax_theta1.draw_artist(self.ln_theta1)
+        self.ax_theta1.draw_artist(self.ln_theta1_goal)
         c.blit(self.ax_theta1.bbox)
 
         c.restore_region(self._bg_theta2)
         self.ax_theta2.draw_artist(self.ln_theta2)
+        self.ax_theta2.draw_artist(self.ln_theta2_goal)
         c.blit(self.ax_theta2.bbox)
 
         c.restore_region(self._bg_phi1)
@@ -224,11 +257,13 @@ class MatplotlibRenderer2D:
     def _on_resize(self, *_):
         self._init_blit()
 
-    def _rb_append(self, t, th1, th2, p1, p2, p3, tau1, tau2, tau3):
+    def _rb_append(self, t, th1, th2, th1_goal, th2_goal, p1, p2, p3, tau1, tau2, tau3):
         i = self.t_idx % self.cfg.N
         self.t_buf[i] = t
         self.th1_buf[i] = th1
         self.th2_buf[i] = th2
+        self.th1_goal_buf[i] = th1_goal
+        self.th2_goal_buf[i] = th2_goal
         self.p1_buf[i] = p1
         self.p2_buf[i] = p2
         self.p3_buf[i] = p3
@@ -244,6 +279,8 @@ class MatplotlibRenderer2D:
             T = self.t_buf[: self.t_idx]
             Th1 = self.th1_buf[: self.t_idx]
             Th2 = self.th2_buf[: self.t_idx]
+            Th1_goal = self.th1_goal_buf[: self.t_idx]
+            Th2_goal = self.th2_goal_buf[: self.t_idx]
             P1 = self.p1_buf[: self.t_idx]
             P2 = self.p2_buf[: self.t_idx]
             P3 = self.p3_buf[: self.t_idx]
@@ -256,6 +293,8 @@ class MatplotlibRenderer2D:
                 T = np.concatenate((self.t_buf[sl], self.t_buf[: last_i + 1]))
                 Th1 = np.concatenate((self.th1_buf[sl], self.th1_buf[: last_i + 1]))
                 Th2 = np.concatenate((self.th2_buf[sl], self.th2_buf[: last_i + 1]))
+                Th1_goal = np.concatenate((self.th1_goal_buf[sl], self.th1_goal_buf[: last_i + 1]))
+                Th2_goal = np.concatenate((self.th2_goal_buf[sl], self.th2_goal_buf[: last_i + 1]))
                 P1 = np.concatenate((self.p1_buf[sl], self.p1_buf[: last_i + 1]))
                 P2 = np.concatenate((self.p2_buf[sl], self.p2_buf[: last_i + 1]))
                 P3 = np.concatenate((self.p3_buf[sl], self.p3_buf[: last_i + 1]))
@@ -266,21 +305,25 @@ class MatplotlibRenderer2D:
                 T = self.t_buf
                 Th1 = self.th1_buf
                 Th2 = self.th2_buf
+                Th1_goal = self.th1_goal_buf
+                Th2_goal = self.th2_goal_buf
                 P1 = self.p1_buf
                 P2 = self.p2_buf
                 P3 = self.p3_buf
                 Tau1 = self.tau1_buf
                 Tau2 = self.tau2_buf
                 Tau3 = self.tau3_buf
-        return T, Th1, Th2, P1, P2, P3, Tau1, Tau2, Tau3
+        return T, Th1, Th2, Th1_goal, Th2_goal, P1, P2, P3, Tau1, Tau2, Tau3
 
     def _fk(self, theta1, theta2):
         l1 = float(self.p.l1)
         l2 = float(self.p.l2)
-        x1 = l1 * np.sin(theta1)
-        y1 = -l1 * np.cos(theta1)
-        x2 = x1 + l2 * np.sin(theta2)
-        y2 = y1 - l2 * np.cos(theta2)
+        theta1_world = -theta1
+        theta2_world = -(theta1 + theta2)  # theta2 is relative to link1
+        x1 = l1 * np.sin(theta1_world)
+        y1 = -l1 * np.cos(theta1_world)
+        x2 = x1 + l2 * np.sin(theta2_world)
+        y2 = y1 - l2 * np.cos(theta2_world)
         return x1, y1, x2, y2
 
     def clear_buffers(self):
@@ -288,6 +331,8 @@ class MatplotlibRenderer2D:
         self.t_buf.fill(0.0)
         self.th1_buf.fill(0.0)
         self.th2_buf.fill(0.0)
+        self.th1_goal_buf.fill(0.0)
+        self.th2_goal_buf.fill(0.0)
         self.p1_buf.fill(0.0)
         self.p2_buf.fill(0.0)
         self.p3_buf.fill(0.0)
@@ -303,6 +348,8 @@ class MatplotlibRenderer2D:
         for ln in (
             self.ln_theta1,
             self.ln_theta2,
+            self.ln_theta1_goal,
+            self.ln_theta2_goal,
             self.ln_phi1,
             self.ln_phi2,
             self.ln_phi3,

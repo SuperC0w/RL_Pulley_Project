@@ -42,8 +42,8 @@ class ControlPanel:
         self._add_label("Actions", y); y -= 0.06
 
         # Action sliders (tau1, tau2)
-        self.s_tau1 = self._add_slider("τ1 (N·m)",  -tau1_lim, tau1_lim, 0.0, y); y -= 0.06
-        self.s_tau2 = self._add_slider("τ2 (N·m)",  -tau2_lim, tau2_lim, 0.0, y); y -= 0.06
+        self.s_tau1 = self._add_slider("\u03c4$_1$ (N·m)",  -tau1_lim, tau1_lim, 0.0, y); y -= 0.06
+        self.s_tau2 = self._add_slider("\u03c4$_2$ (N·m)",  -tau2_lim, tau2_lim, 0.0, y); y -= 0.06
 
         # Creating buttons
         btns = self._add_button_row(["Zero actions", "Reset simulation", "Force Impulse"], y)
@@ -63,7 +63,7 @@ class ControlPanel:
         y -= 0.06
 
         # Theta goal slider 
-        self.s_theta_goal = self._add_slider("Goal θ (radians)",  -np.pi/2, np.pi/2, 0.0, y); y -= 0.06
+        self.s_theta_goal = self._add_slider("Goal \u03B8 (radians)",  -np.pi/2, np.pi/2, 0.0, y); y -= 0.06
         
         # Coactivation goal slider 
         self.s_coact_goal = self._add_slider("Coact Force (N)",  0.0, 8.6, 0.0, y); y -= 0.06

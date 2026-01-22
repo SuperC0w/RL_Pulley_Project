@@ -37,9 +37,9 @@ class ControlPanel2D:
 
         y = 0.95
         self._add_label("Actions", y); y -= 0.06
-        self.s_tau1 = self._add_slider("tau1 (Nm)", -tau1_lim, tau1_lim, 0.0, y); y -= 0.06
-        self.s_tau2 = self._add_slider("tau2 (Nm)", -tau2_lim, tau2_lim, 0.0, y); y -= 0.06
-        self.s_tau3 = self._add_slider("tau3 (Nm)", -tau3_lim, tau3_lim, 0.0, y); y -= 0.06
+        self.s_tau1 = self._add_slider("\u03c4$_1$ (Nm)", -tau1_lim, tau1_lim, 0.0, y); y -= 0.06
+        self.s_tau2 = self._add_slider("\u03c4$_2$ (Nm)", -tau2_lim, tau2_lim, 0.0, y); y -= 0.06
+        self.s_tau3 = self._add_slider("\u03c4$_3$ (Nm)", -tau3_lim, tau3_lim, 0.0, y); y -= 0.06
 
         btns = self._add_button_row(["Zero actions", "Reset simulation", "Force Impulse"], y)
         self.b_zero, self.b_reset, self.b_impulse = btns
@@ -54,8 +54,12 @@ class ControlPanel2D:
         self.chk_goal_mode.on_clicked(self._on_goal_mode_toggled)
         y -= 0.06
 
-        self.s_theta1_goal = self._add_slider("Goal theta1 (rad)", -np.pi, np.pi, 0.0, y); y -= 0.06
-        self.s_theta2_goal = self._add_slider("Goal theta2 (rad)", -np.pi, np.pi, 0.0, y); y -= 0.06
+        # Theta goal slider 
+        self.s_theta1_goal = self._add_slider("Goal \u03B8$_1$ (rad)", -np.pi/2, np.pi/2, 0.0, y); y -= 0.06
+        self.s_theta2_goal = self._add_slider("Goal \u03B8$_2$ (rad)", -np.pi/2, np.pi/2, 0.0, y); y -= 0.06
+        
+        # Coactivation goal slider 
+        self.s_coact_goal = self._add_slider("Coact Torque (N)", (0 + 0.02/2 + 0.02/4)*2, params.tau_max1 - 0.020/2, 0.050, y); y -= 0.06
 
         amp_slider_rect = [0.10, y, 0.80, 0.04]; amp_text_rect = [0.90, y, 0.095, 0.04]
         self.goal_amplitude = self._add_slider("Amplitude (rad)", 0.0, np.pi, 0.1, y, rect=amp_slider_rect)

@@ -1,5 +1,3 @@
-# TODO
-# will need to modified later
 import numpy as np
 from .params import PulleyParams
 from .dynamics import make_dynamics, Inputs, STATE_SIZE
@@ -26,6 +24,16 @@ class PulleyEnv:
         if seed is not None:
             self.rng = np.random.default_rng(seed)
         self._x = np.zeros(STATE_SIZE, dtype=np.float32)
+
+        # TESTING->winding up motor pulleys when setting initial positions of theta 1 and theta 2
+        # theta1 = np.pi/4
+        # theta2 = np.pi/2
+        # self._x[:] = 0.0
+        # self._x[0] = np.float32(theta1)
+        # self._x[2] = np.float32(theta2)
+        # self._x[4] = np.float32(-theta1*self.params.r4/self.params.r1 - theta2*self.params.r5/self.params.r1)
+        # self._x[6] = np.float32(-theta1*self.params.r4/self.params.r2 + theta2*self.params.r5/self.params.r2)
+        # self._x[8] = np.float32(theta1*self.params.r4/self.params.r3)
 
         self._t = 0.0
         self._steps = 0

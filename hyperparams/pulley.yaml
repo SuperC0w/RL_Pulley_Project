@@ -13,3 +13,19 @@ PulleyEnv-v0:
     net_arch: [256, 256]
   normalize: "{'norm_obs': True, 'norm_reward': True, 'clip_obs': 10.0}"
   n_envs: 10
+
+PulleyEnv2D-v0:
+  n_timesteps: 1e6
+  policy: MlpPolicy
+  batch_size: 256
+  learning_rate: 0.0003
+  buffer_size: 1000000
+  gamma: 0.99
+  tau: 0.005
+  ent_coef: auto
+  learning_starts: 10000
+  use_sde: true
+  policy_kwargs:
+    net_arch: [256, 256]
+  normalize: "{'norm_obs': True, 'norm_reward': True, 'clip_obs': 10.0}"
+  n_envs: 10
